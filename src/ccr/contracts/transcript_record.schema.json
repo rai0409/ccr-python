@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ccr/transcript_record.schema.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "record_id",
+    "event_id",
+    "session_id",
+    "run_id",
+    "seq",
+    "ts",
+    "type",
+    "turn_index",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+$"},
+    "record_id": {"type": "string"},
+    "event_id": {"type": "string"},
+    "session_id": {"type": "string"},
+    "run_id": {"type": "string"},
+    "seq": {"type": "integer", "minimum": 1},
+    "ts": {"type": "string"},
+    "type": {"type": "string"},
+    "turn_index": {"type": "integer", "minimum": 0},
+    "parent_id": {"type": ["string", "null"]},
+    "parent_event_id": {"type": ["string", "null"]},
+    "payload": {"type": "object"},
+    "message_id": {"type": "string"},
+    "tool_call_id": {"type": "string"},
+    "tool_meta": {"type": "object"},
+    "permission_meta": {"type": "object"},
+    "error_meta": {"type": "object"},
+    "resume_meta": {"type": "object"}
+  },
+  "additionalProperties": true
+}

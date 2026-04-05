@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ccr/events.schema.json",
+  "type": "object",
+  "required": ["event_id", "session_id", "run_id", "seq", "ts", "type", "turn_index", "payload"],
+  "properties": {
+    "event_id": {"type": "string"},
+    "session_id": {"type": "string"},
+    "run_id": {"type": "string"},
+    "seq": {"type": "integer", "minimum": 1},
+    "ts": {"type": "string"},
+    "type": {
+      "type": "string",
+      "enum": [
+        "session_start",
+        "session_resumed",
+        "user_message",
+        "assistant_delta",
+        "assistant_message",
+        "tool_call_requested",
+        "tool_permission_required",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "timeout_triggered",
+        "tool_result",
+        "tool_execution_finished",
+        "retry_scheduled",
+        "fallback_model_selected",
+        "interrupt_received",
+        "system_notice",
+        "session_completed",
+        "session_failed"
+      ]
+    },
+    "turn_index": {"type": "integer", "minimum": 0},
+    "payload": {"type": "object"},
+    "parent_event_id": {"type": ["string", "null"]},
+    "message_id": {"type": "string"},
+    "tool_call_id": {"type": "string"},
+    "model": {"type": "string"},
+    "provider": {"type": "string"},
+    "meta": {"type": "object"}
+  },
+  "additionalProperties": false
+}
