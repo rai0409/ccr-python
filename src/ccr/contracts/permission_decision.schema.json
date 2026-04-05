@@ -14,7 +14,16 @@
   "properties": {
     "mode": {"type": "string", "enum": ["ask", "auto", "bypass"]},
     "decision": {"type": "string", "enum": ["allow", "deny", "ask"]},
-    "reason_code": {"type": "string", "enum": ["auto_safe", "hard_boundary_path_outside_root", "ask_unavailable"]},
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "auto_safe",
+        "hard_boundary_path_outside_root",
+        "ask_unavailable",
+        "mode_ask",
+        "auto_requires_user"
+      ]
+    },
     "precedence_rank": {"type": "integer"},
     "decision_source": {"type": "string"},
     "risk_label": {"type": "string"},

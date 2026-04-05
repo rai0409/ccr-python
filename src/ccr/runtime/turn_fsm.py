@@ -9,6 +9,7 @@ class TurnState(StrEnum):
     USER = "user"
     STREAMING = "streaming"
     TOOL_REQUESTED = "tool_requested"
+    TOOL_REQUIRED = "tool_required"
     TOOL_DECIDED = "tool_decided"
     TOOL_RUNNING = "tool_running"
     TOOL_RESULT = "tool_result"
@@ -31,7 +32,11 @@ class TurnStateMachine:
             self.state = TurnState.STREAMING
         elif self.state in {TurnState.USER, TurnState.STREAMING, TurnState.TOOL_RESULT} and event_type == "tool_call_requested":
             self.state = TurnState.TOOL_REQUESTED
+        elif self.state == TurnState.TOOL_REQUESTED and event_type == "tool_permission_required":
+            self.state = TurnState.TOOL_REQUIRED
         elif self.state == TurnState.TOOL_REQUESTED and event_type == "tool_permission_decided":
+            self.state = TurnState.TOOL_DECIDED
+        elif self.state == TurnState.TOOL_REQUIRED and event_type == "tool_permission_decided":
             self.state = TurnState.TOOL_DECIDED
         elif self.state == TurnState.TOOL_DECIDED and event_type in {"tool_execution_started", "tool_result"}:
             self.state = TurnState.TOOL_RUNNING if event_type == "tool_execution_started" else TurnState.TOOL_RESULT

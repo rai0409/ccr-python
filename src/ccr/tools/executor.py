@@ -42,6 +42,7 @@ class ToolExecutor:
         mode: str,
         interactive_available: bool,
         turn_index: int,
+        resolve_permission: Callable[[str], str | None] | None = None,
     ) -> ToolExecutionOutcome:
         self.emit(
             "tool_call_requested",
@@ -56,6 +57,52 @@ class ToolExecutor:
             mode=mode,
             interactive_available=interactive_available,
         )
+
+        if decision.decision == "ask":
+            self.emit(
+                "tool_permission_required",
+                payload={
+                    "tool_call_id": intent.tool_call_id,
+                    "request_hash": decision.request_hash,
+                    "risk_label": decision.risk_label,
+                    "interactive_available": interactive_available,
+                },
+                turn_index=turn_index,
+                tool_call_id=intent.tool_call_id,
+            )
+
+            raw_user_decision = resolve_permission(intent.tool_call_id) if resolve_permission is not None else None
+            normalized = str(raw_user_decision or "").strip()
+            if normalized in {"allow_once", "allow_session", "allow_persistent"}:
+                decision = PermissionDecision(
+                    mode=decision.mode,
+                    decision="allow",
+                    reason_code=decision.reason_code,
+                    precedence_rank=decision.precedence_rank,
+                    decision_source=decision.decision_source,
+                    risk_label=decision.risk_label,
+                    request_hash=decision.request_hash,
+                )
+            elif normalized in {"deny_once", "deny_session", "deny_persistent"}:
+                decision = PermissionDecision(
+                    mode=decision.mode,
+                    decision="deny",
+                    reason_code=decision.reason_code,
+                    precedence_rank=decision.precedence_rank,
+                    decision_source=decision.decision_source,
+                    risk_label=decision.risk_label,
+                    request_hash=decision.request_hash,
+                )
+            else:
+                decision = PermissionDecision(
+                    mode=decision.mode,
+                    decision="deny",
+                    reason_code="ask_unavailable",
+                    precedence_rank=6 if decision.mode == "ask" else 9,
+                    decision_source="mode",
+                    risk_label=decision.risk_label,
+                    request_hash=decision.request_hash,
+                )
 
         self.emit(
             "tool_permission_decided",
@@ -90,29 +137,35 @@ class ToolExecutor:
 
         tool = self.registry.get(intent.tool_name)
         if tool is None:
-            # Phase 2A keeps unsupported tools denied via ask_unavailable fallback semantics.
-            fallback = PermissionDecision(
-                mode=mode,
-                decision="deny",
-                reason_code="ask_unavailable",
-                precedence_rank=9 if mode != "ask" else 6,
-                decision_source="mode",
-                risk_label="unknown",
-                request_hash=decision.request_hash,
+            # Configuration/runtime integrity failure: decision was allow but tool is absent.
+            # Preserve lifecycle ordering and keep decision metadata consistent.
+            self.emit(
+                "tool_execution_started",
+                payload={"tool_name": intent.tool_name},
+                turn_index=turn_index,
+                tool_call_id=intent.tool_call_id,
             )
             self.emit(
                 "tool_result",
-                payload={"result": {"status": "denied"}},
+                payload={
+                    "result": {
+                        "status": "error",
+                        "error": {
+                            "code": "TOOL_NOT_REGISTERED",
+                            "message": f"tool not registered: {intent.tool_name}",
+                        },
+                    }
+                },
                 turn_index=turn_index,
                 tool_call_id=intent.tool_call_id,
             )
             self.emit(
                 "tool_execution_finished",
-                payload={"status": "denied"},
+                payload={"status": "error"},
                 turn_index=turn_index,
                 tool_call_id=intent.tool_call_id,
             )
-            return ToolExecutionOutcome(status="denied", decision=fallback)
+            return ToolExecutionOutcome(status="error", decision=decision)
 
         self.emit(
             "tool_execution_started",

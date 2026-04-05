@@ -58,6 +58,13 @@ class PermissionEngine:
         rp = self._normalize_path(raw_path)
         return rp == self.cwd or rp.startswith(self.cwd + os.sep)
 
+    def _risk_label(self, tool_name: str) -> str:
+        if tool_name in SAFE_READ_TOOLS:
+            return "safe_read"
+        if tool_name == "Bash":
+            return "dangerous_exec"
+        return "unknown"
+
     def decide(
         self,
         *,
@@ -67,6 +74,7 @@ class PermissionEngine:
         interactive_available: bool,
     ) -> PermissionDecision:
         request_hash = self._request_hash(tool_name=tool_name, tool_input=tool_input)
+        risk_label = self._risk_label(tool_name)
 
         path = self._extract_path(tool_input)
         if path is not None and not self._is_in_cwd(path):
@@ -76,7 +84,7 @@ class PermissionEngine:
                 reason_code="hard_boundary_path_outside_root",
                 precedence_rank=1,
                 decision_source="hard_boundary",
-                risk_label="safe_read" if tool_name in SAFE_READ_TOOLS else "unknown",
+                risk_label=risk_label,
                 request_hash=request_hash,
             )
 
@@ -91,13 +99,38 @@ class PermissionEngine:
                 request_hash=request_hash,
             )
 
-        rank = 6 if mode == "ask" else 9
+        if mode == "ask":
+            if interactive_available:
+                return PermissionDecision(
+                    mode=mode,
+                    decision="ask",
+                    reason_code="mode_ask",
+                    precedence_rank=5,
+                    decision_source="mode",
+                    risk_label=risk_label,
+                    request_hash=request_hash,
+                )
+            rank = 6
+        elif mode == "auto" and risk_label in {"dangerous_exec", "unknown"}:
+            if interactive_available:
+                return PermissionDecision(
+                    mode=mode,
+                    decision="ask",
+                    reason_code="auto_requires_user",
+                    precedence_rank=8,
+                    decision_source="mode",
+                    risk_label=risk_label,
+                    request_hash=request_hash,
+                )
+            rank = 9
+        else:
+            rank = 9
         return PermissionDecision(
             mode=mode,
             decision="deny",
             reason_code="ask_unavailable",
             precedence_rank=rank,
             decision_source="mode",
-            risk_label="unknown",
+            risk_label=risk_label,
             request_hash=request_hash,
         )
