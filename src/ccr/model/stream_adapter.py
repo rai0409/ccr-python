@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Iterator
+from typing import Any, Iterable, Iterator
 
 from .provider_base import ModelChunk
 
@@ -9,7 +9,7 @@ from .provider_base import ModelChunk
 @dataclass(frozen=True)
 class AdaptedChunk:
     kind: str
-    content: str
+    content: Any
 
 
 class ModelStreamAdapter:
@@ -24,5 +24,7 @@ class ModelStreamAdapter:
                     yield AdaptedChunk(kind="assistant_delta", content=chunk.content)
                 yield AdaptedChunk(kind="assistant_message", content=chunk.content)
                 saw_delta = False
+            elif chunk.kind == "tool":
+                yield AdaptedChunk(kind="tool_call", content=chunk.content)
             else:
                 raise RuntimeError(f"unsupported chunk kind: {chunk.kind}")

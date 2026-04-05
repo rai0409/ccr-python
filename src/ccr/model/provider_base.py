@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Any, Iterator
 
 
 @dataclass(frozen=True)
@@ -14,7 +14,7 @@ class ModelRequest:
 @dataclass(frozen=True)
 class ModelChunk:
     kind: str
-    content: str
+    content: Any
 
 
 class ProviderBase(ABC):
