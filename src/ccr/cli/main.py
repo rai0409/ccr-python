@@ -71,9 +71,6 @@ def run_cli(
 
     if input_mode is InputMode.TEXT:
         prompt = args.prompt if args.prompt is not None else stdin_blob
-        if prompt == "":
-            stderr.write("usage error: missing prompt\n")
-            return exit_codes.CLI_USAGE_ERROR
     else:
         user_msgs = [m for m in stream_messages if m.get("type") == "user_message"]
         if not user_msgs:
@@ -121,6 +118,9 @@ def run_cli(
     except Exception as exc:  # pragma: no cover - top-level boundary
         stderr.write(f"internal invariant failure: {exc}\n")
         return exit_codes.INVARIANT_FAILURE
+
+    if result.exit_code == exit_codes.PERMISSION_UNAVAILABLE:
+        stderr.write("permission required but unavailable\n")
 
     if output_mode is OutputMode.TEXT:
         if result.final_assistant_message is not None:

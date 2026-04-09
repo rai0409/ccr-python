@@ -60,6 +60,8 @@ class TranscriptStore:
             record["message_id"] = event.message_id
         if event.tool_call_id is not None:
             record["tool_call_id"] = event.tool_call_id
+        if event.meta is not None and isinstance(event.meta.get("permission_meta"), dict):
+            record["permission_meta"] = dict(event.meta["permission_meta"])
 
         with session_lock(self._lock_path(event.session_id)):
             jsonl.append_jsonl(self._session_path(event.session_id), record, fsync=True)

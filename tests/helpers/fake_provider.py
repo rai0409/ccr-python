@@ -16,6 +16,13 @@ class ScriptedProvider(ProviderBase):
             elif step.get("emit") == "assistant_message":
                 yield ModelChunk(kind="message", content=str(step.get("content", "")))
             elif "emit_tool" in step:
-                raise RuntimeError("tools are out of scope in Phase 1")
+                spec = step["emit_tool"]
+                yield ModelChunk(
+                    kind="tool",
+                    content={
+                        "tool_name": str(spec["tool_name"]),
+                        "input": dict(spec.get("input", {})),
+                    },
+                )
             else:
                 raise RuntimeError(f"unsupported scripted step: {step}")

@@ -1,7 +1,7 @@
 # ccr-python current implementation
 
 ## summary
-`ccr-python` is currently at **Phase 1 implemented** status.
+`ccr-python` is currently at **Phase 2A implemented** status.
 
 The repository contains a runnable clean-room headless runtime core with:
 - CLI parsing and entry
@@ -10,7 +10,9 @@ The repository contains a runnable clean-room headless runtime core with:
 - append-only transcript baseline
 - session index baseline
 - fake/scripted provider path
-- simple assistant round-trip with no tools
+- read-only tool execution (Read / LS / Glob / Grep)
+- minimal permission decisions (`auto_safe`, `hard_boundary_path_outside_root`, `ask_unavailable`)
+- tool lifecycle event persistence
 
 This repository does **not** yet implement the full runtime described by the broad spec.
 
@@ -47,19 +49,24 @@ This repository does **not** yet implement the full runtime described by the bro
 ## not yet implemented
 
 ### tools
+Implemented:
+- Tool contracts / registry / executor for read-only tools
+- Read / LS / Glob / Grep runtime path
+
 Not yet implemented:
-- Tool contracts
-- Tool registry
-- Tool executor
-- Read / LS / Glob / Grep / Bash / Edit / Write implementations in runtime path
+- Bash / Edit / Write runtime path
 
 ### permission engine
+Implemented (Phase 2A minimal):
+- hard boundary deny
+- auto_safe allow
+- ask_unavailable deny
+
 Not yet implemented:
-- deterministic permission engine behavior
+- interactive ask flow
 - rule store
 - audit log
 - session/persistent rule replay
-- permission-required ask path handling in runtime
 
 ### resume / recovery
 Not yet implemented:
@@ -83,12 +90,14 @@ Not yet implemented:
 - full sandbox runtime
 
 ## current correctness claims
-The current implementation is intended to satisfy the Phase 1 minimal path only:
+The current implementation is intended to satisfy the Phase 2A active slice:
 - text/json/stream-json CLI path
 - one-turn assistant round-trip
 - append-only transcript baseline
 - session/run identity allocation
 - stream-only assistant_delta behavior
+- read-only tool lifecycle ordering and persistence
+- minimal deterministic permission decisions
 
 ## source of truth
 The repository is governed by:
@@ -97,7 +106,4 @@ The repository is governed by:
 - `docs/status.md` for current execution phase and next implementation target
 
 ## next target
-Next implementation target is **Phase 2A**:
-- read-only tools
-- minimal permission engine
-- tool lifecycle events
+Next implementation target is **Phase 2B+** (frozen until activated).
