@@ -1,7 +1,7 @@
 # ccr-python status
 
 ## current phase
-Phase 1 implemented. Next step: Phase 2A (read-only tools + minimal permission engine).
+Phase 2A implemented (read-only tools + minimal permission engine).
 
 ## frozen decisions
 - Broad spec is intentionally maintained.
@@ -37,24 +37,21 @@ Phase 1 implemented. Next step: Phase 2A (read-only tools + minimal permission e
   - append-only transcript baseline
   - session index update / continue baseline
   - fake provider path
+  - read-only tool stack (Read / LS / Glob / Grep)
+  - minimal permission decisions:
+    - hard boundary deny
+    - auto_safe allow
+    - ask_unavailable deny
+  - tool lifecycle event persistence
 - Not yet implemented:
-  - tool stack
-  - permission engine behavior
+  - interactive permission ask flow
+  - Bash/Edit/Write tool execution
   - full resume reconstruction
   - real provider client
   - full retry/fallback/interrupt behavior
 
 ## next implementation target
-Phase 2A:
-- Tool contracts
-- Tool registry
-- Tool executor
-- Read / LS / Glob / Grep
-- Minimal permission engine
-  - hard boundary deny
-  - auto_safe allow
-  - ask_unavailable deny
-- Tool lifecycle event persistence
+Phase 2B (frozen, not yet active).
 
 ## unresolved assumptions
 - stream-json permission_decision payload finalization beyond Phase 2A

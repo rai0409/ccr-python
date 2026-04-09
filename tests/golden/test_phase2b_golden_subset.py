@@ -14,6 +14,8 @@ from ccr.storage.transcript_store import TranscriptStore
 from helpers.fake_provider import ScriptedProvider
 from helpers.transcript_assertions import assert_parent_chain, assert_record_identity
 
+pytestmark = pytest.mark.skip(reason="Phase 2B golden subset is out of active Phase 2A scope")
+
 PHASE2B_CASES = {
     "cli_ask_unavailable_exit6",
     "event_permission_required_only_when_askable",

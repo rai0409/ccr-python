@@ -18,7 +18,7 @@ Instead, it follows a behavior-first and specification-first approach.
 
 ## Current Status
 
-Current repository status: **Phase 1 implemented**.
+Current repository status: **Phase 2A implemented**.
 
 Implemented now:
 - CLI parser and entry
@@ -28,11 +28,13 @@ Implemented now:
 - append-only transcript baseline
 - session index baseline
 - fake/scripted provider path
-- simple one-turn assistant round-trip with no tools
+- read-only tool execution (Read / LS / Glob / Grep)
+- minimal permission decisions (`auto_safe`, `hard_boundary_path_outside_root`, `ask_unavailable`)
+- tool lifecycle event persistence
 
 Not implemented yet:
-- tool stack
-- permission engine
+- interactive permission ask flow
+- Bash / Edit / Write execution
 - full resume reconstruction
 - real provider client
 - retry / fallback / interrupt parity
@@ -69,6 +71,7 @@ Implemented:
 - `EventBus`
 - deterministic event envelope creation
 - run-scoped terminality guard
+- deterministic tool lifecycle event ordering
 
 ### Persistence
 Implemented:
@@ -88,8 +91,8 @@ Implemented:
 ## What Is Not Implemented Yet
 
 Not yet implemented:
-- tool contracts and tool execution runtime
-- permission engine behavior
+- interactive permission ask flow and rule persistence
+- Bash/Edit/Write tool execution
 - session and persistent rule handling
 - audit log behavior
 - full resume reconstruction
@@ -197,19 +200,15 @@ printf '{"type":"user_message","content":"hello"}\n' | python -m ccr.cli.main -p
 
 Important current limitations:
 - provider behavior is still fake/scripted
-- no real tool execution path exists yet
-- no real permission engine exists yet
+- only read-only local filesystem tools are implemented (Read / LS / Glob / Grep)
+- permission behavior is intentionally minimal for Phase 2A only
 - no full resume loader exists yet
-- current correctness claims apply to the Phase 1 minimal path only
+- current correctness claims apply to the Phase 2A active slice only
 
 ## Next Step
 
-The next implementation target is **Phase 2A**:
-- read-only tools
-- minimal permission engine
-- tool lifecycle events
-
-That phase is intentionally limited to:
+The next implementation target is **Phase 2B+**.
+Phase 2A remains intentionally limited to:
 - Read
 - LS
 - Glob
@@ -223,3 +222,9 @@ That phase is intentionally limited to:
 This repository is meant to evolve through constrained, auditable phases.
 If you are reading the broad spec, treat it as the intended destination, not as a claim that all features are already implemented.
 
+
+## License
+
+This repository is source-available for personal study, research, and evaluation.
+Commercial use requires prior written permission and a separate paid license.
+See `LICENSE` for details.
