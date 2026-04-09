@@ -49,7 +49,7 @@ def test_permission_ask_mode_denies_with_ask_unavailable() -> None:
         tool_name="Read",
         tool_input={"path": "/tmp/ccr_ws/a.txt"},
         mode="ask",
-        interactive_available=True,
+        interactive_available=False,
     )
     assert d.decision == "deny"
     assert d.reason_code == "ask_unavailable"

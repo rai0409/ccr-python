@@ -26,3 +26,19 @@ def test_permission_decision_schema_valid() -> None:
         },
         schema,
     )
+
+
+def test_permission_decision_schema_ask_valid() -> None:
+    schema = _load_schema("permission_decision.schema.json")
+    validate(
+        {
+            "mode": "ask",
+            "decision": "ask",
+            "reason_code": "mode_ask",
+            "precedence_rank": 5,
+            "decision_source": "mode",
+            "risk_label": "dangerous_exec",
+            "request_hash": "sha256:def",
+        },
+        schema,
+    )

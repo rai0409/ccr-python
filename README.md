@@ -18,7 +18,7 @@ Instead, it follows a behavior-first and specification-first approach.
 
 ## Current Status
 
-Current repository status: **Phase 2A implemented**.
+Current repository status: **Phase 2B implemented**.
 
 Implemented now:
 - CLI parser and entry
@@ -31,6 +31,7 @@ Implemented now:
 - read-only tool execution (Read / LS / Glob / Grep)
 - minimal permission decisions (`auto_safe`, `hard_boundary_path_outside_root`, `ask_unavailable`)
 - tool lifecycle event persistence
+- interactive permission ask flow (`tool_permission_required`) with one-shot `allow_once` / `deny_once`
 
 Not implemented yet:
 - interactive permission ask flow
@@ -208,7 +209,7 @@ Important current limitations:
 ## Next Step
 
 The next implementation target is **Phase 2B+**.
-Phase 2A remains intentionally limited to:
+Phase 2B remains intentionally limited to:
 - Read
 - LS
 - Glob
@@ -216,6 +217,7 @@ Phase 2A remains intentionally limited to:
 - hard boundary deny
 - auto_safe allow
 - ask_unavailable deny
+- one-shot interactive permission resolution (`allow_once`, `deny_once`)
 
 ## Notes
 
