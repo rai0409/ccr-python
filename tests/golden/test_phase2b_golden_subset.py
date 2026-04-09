@@ -14,12 +14,8 @@ from ccr.storage.transcript_store import TranscriptStore
 from helpers.fake_provider import ScriptedProvider
 from helpers.transcript_assertions import assert_parent_chain, assert_record_identity
 
-pytestmark = pytest.mark.skip(reason="Phase 2B golden subset is out of active Phase 2A scope")
-
 PHASE2B_CASES = {
     "cli_ask_unavailable_exit6",
-    "event_permission_required_only_when_askable",
-    "permission_auto_dangerous_ask",
     "permission_auto_dangerous_noninteractive",
 }
 
@@ -144,8 +140,4 @@ def _run_variant(case: dict[str, Any], variant: str | None, monkeypatch: pytest.
 
 @pytest.mark.parametrize("case", _load_cases(), ids=lambda c: str(c["test_name"]))
 def test_phase2b_golden_subset(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    if case["test_name"] == "event_permission_required_only_when_askable":
-        _run_variant(case, "case_a", monkeypatch)
-        _run_variant(case, "case_b", monkeypatch)
-        return
     _run_variant(case, None, monkeypatch)

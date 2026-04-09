@@ -1,7 +1,7 @@
 # ccr-python status
 
 ## current phase
-Phase 2A implemented (read-only tools + minimal permission engine).
+Phase 2B implemented (interactive permission ask flow on top of Phase 2A baseline).
 
 ## frozen decisions
 - Broad spec is intentionally maintained.
@@ -43,15 +43,18 @@ Phase 2A implemented (read-only tools + minimal permission engine).
     - auto_safe allow
     - ask_unavailable deny
   - tool lifecycle event persistence
+  - interactive ask flow:
+    - `tool_permission_required`
+    - one-shot `allow_once` / `deny_once`
 - Not yet implemented:
-  - interactive permission ask flow
+  - session/persistent permission rules
   - Bash/Edit/Write tool execution
   - full resume reconstruction
   - real provider client
   - full retry/fallback/interrupt behavior
 
 ## next implementation target
-Phase 2B (frozen, not yet active).
+Phase 2C+ (frozen, not yet active).
 
 ## unresolved assumptions
 - stream-json permission_decision payload finalization beyond Phase 2A

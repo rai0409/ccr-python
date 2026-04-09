@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
 from ccr.policy.engine import PermissionEngine
-
-pytestmark = pytest.mark.skip(reason="Phase 2B behavior is out of active Phase 2A scope")
 
 
 def test_permission_ask_mode_interactive_requires_user() -> None:

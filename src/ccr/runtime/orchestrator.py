@@ -64,6 +64,7 @@ class SessionOrchestrator:
         self._last_persisted_event_id: str | None = None
         self._run_terminal_emitted = False
         self._tool_call_counter = 0
+        self._permission_decisions: dict[str, list[str]] = {}
 
     def _interactive_available(self) -> bool:
         return self.config.input_mode is InputMode.STREAM_JSON or not self.config.print_mode
@@ -147,11 +148,32 @@ class SessionOrchestrator:
                 return str(msg.get("content", ""))
         raise RuntimeError("missing user_message")
 
+    def _load_permission_decisions(self, stream_messages: list[dict]) -> None:
+        self._permission_decisions = {}
+        for msg in stream_messages:
+            if msg.get("type") != "permission_decision":
+                continue
+            tool_call_id = str(msg.get("tool_call_id", ""))
+            if tool_call_id == "":
+                continue
+            decision = str(msg.get("decision", ""))
+            self._permission_decisions.setdefault(tool_call_id, []).append(decision)
+
+    def _consume_permission_decision(self, tool_call_id: str) -> str | None:
+        queue = self._permission_decisions.get(tool_call_id)
+        if not queue:
+            return None
+        value = queue.pop(0)
+        if not queue:
+            self._permission_decisions.pop(tool_call_id, None)
+        return value
+
     def run(self, *, stream_messages: list[dict]) -> RunResult:
         self._session_id, self._run_id, resumed = self._resolve_session_and_run()
         self._seq = self.transcript_store.get_next_seq(self._session_id) - 1
         self._last_persisted_event_id = self.transcript_store.get_last_persisted_event_id(self._session_id)
         self._tool_call_counter = 0
+        self._load_permission_decisions(stream_messages)
 
         if resumed:
             self._emit(
@@ -217,6 +239,7 @@ class SessionOrchestrator:
                     mode=self.config.permission_mode,
                     interactive_available=self._interactive_available(),
                     turn_index=1,
+                    resolve_permission=self._consume_permission_decision,
                 )
                 if outcome.status == "denied":
                     if outcome.decision.reason_code == "ask_unavailable":

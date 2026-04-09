@@ -1,7 +1,7 @@
 # ccr-python current implementation
 
 ## summary
-`ccr-python` is currently at **Phase 2A implemented** status.
+`ccr-python` is currently at **Phase 2B implemented** status.
 
 The repository contains a runnable clean-room headless runtime core with:
 - CLI parsing and entry
@@ -13,6 +13,7 @@ The repository contains a runnable clean-room headless runtime core with:
 - read-only tool execution (Read / LS / Glob / Grep)
 - minimal permission decisions (`auto_safe`, `hard_boundary_path_outside_root`, `ask_unavailable`)
 - tool lifecycle event persistence
+- interactive permission ask flow with one-shot stream-json decisions (`allow_once`, `deny_once`)
 
 This repository does **not** yet implement the full runtime described by the broad spec.
 
@@ -57,13 +58,13 @@ Not yet implemented:
 - Bash / Edit / Write runtime path
 
 ### permission engine
-Implemented (Phase 2A minimal):
+Implemented (Phase 2B minimal):
 - hard boundary deny
 - auto_safe allow
 - ask_unavailable deny
+- askable intermediate decisions (`mode_ask`, `auto_requires_user`) for interactive resolution
 
 Not yet implemented:
-- interactive ask flow
 - rule store
 - audit log
 - session/persistent rule replay
@@ -90,7 +91,7 @@ Not yet implemented:
 - full sandbox runtime
 
 ## current correctness claims
-The current implementation is intended to satisfy the Phase 2A active slice:
+The current implementation is intended to satisfy the Phase 2B active slice:
 - text/json/stream-json CLI path
 - one-turn assistant round-trip
 - append-only transcript baseline
@@ -98,6 +99,7 @@ The current implementation is intended to satisfy the Phase 2A active slice:
 - stream-only assistant_delta behavior
 - read-only tool lifecycle ordering and persistence
 - minimal deterministic permission decisions
+- deterministic interactive ask flow with `tool_permission_required` and one-shot resolution
 
 ## source of truth
 The repository is governed by:
@@ -106,4 +108,4 @@ The repository is governed by:
 - `docs/status.md` for current execution phase and next implementation target
 
 ## next target
-Next implementation target is **Phase 2B+** (frozen until activated).
+Next implementation target is **Phase 2C+** (frozen until activated).
