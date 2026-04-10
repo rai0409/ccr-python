@@ -34,6 +34,37 @@ class ToolExecutor:
         self.permission_engine = permission_engine
         self.emit = emit
         self.context = ToolExecutionContext(cwd=cwd)
+        self._session_allow_hashes: set[str] = set()
+        self._session_deny_hashes: set[str] = set()
+
+    def bind_session_replay_state(self, *, allow_hashes: set[str], deny_hashes: set[str]) -> None:
+        self._session_allow_hashes = allow_hashes
+        self._session_deny_hashes = deny_hashes
+
+    def _apply_session_replay(self, decision: PermissionDecision) -> PermissionDecision:
+        if decision.reason_code == "hard_boundary_path_outside_root":
+            return decision
+        if decision.request_hash in self._session_deny_hashes:
+            return PermissionDecision(
+                mode=decision.mode,
+                decision="deny",
+                reason_code="session_rule_deny",
+                precedence_rank=2,
+                decision_source="session_rule",
+                risk_label=decision.risk_label,
+                request_hash=decision.request_hash,
+            )
+        if decision.request_hash in self._session_allow_hashes:
+            return PermissionDecision(
+                mode=decision.mode,
+                decision="allow",
+                reason_code="session_rule_allow",
+                precedence_rank=3,
+                decision_source="session_rule",
+                risk_label=decision.risk_label,
+                request_hash=decision.request_hash,
+            )
+        return decision
 
     def execute(
         self,
@@ -57,6 +88,7 @@ class ToolExecutor:
             mode=mode,
             interactive_available=interactive_available,
         )
+        decision = self._apply_session_replay(decision)
 
         if decision.decision == "ask":
             self.emit(
@@ -83,6 +115,17 @@ class ToolExecutor:
                     risk_label=decision.risk_label,
                     request_hash=decision.request_hash,
                 )
+            elif normalized == "allow_session":
+                decision = PermissionDecision(
+                    mode=decision.mode,
+                    decision="allow",
+                    reason_code=decision.reason_code,
+                    precedence_rank=decision.precedence_rank,
+                    decision_source=decision.decision_source,
+                    risk_label=decision.risk_label,
+                    request_hash=decision.request_hash,
+                )
+                self._session_allow_hashes.add(decision.request_hash)
             elif normalized == "deny_once":
                 decision = PermissionDecision(
                     mode=decision.mode,
@@ -93,6 +136,17 @@ class ToolExecutor:
                     risk_label=decision.risk_label,
                     request_hash=decision.request_hash,
                 )
+            elif normalized == "deny_session":
+                decision = PermissionDecision(
+                    mode=decision.mode,
+                    decision="deny",
+                    reason_code=decision.reason_code,
+                    precedence_rank=decision.precedence_rank,
+                    decision_source=decision.decision_source,
+                    risk_label=decision.risk_label,
+                    request_hash=decision.request_hash,
+                )
+                self._session_deny_hashes.add(decision.request_hash)
             else:
                 decision = PermissionDecision(
                     mode=decision.mode,

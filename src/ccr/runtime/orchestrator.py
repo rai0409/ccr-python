@@ -22,6 +22,9 @@ from .events import EventEnvelope
 from .turn_fsm import TurnStateMachine
 
 
+_SESSION_REPLAY_STATE: dict[str, dict[str, set[str]]] = {}
+
+
 @dataclass(frozen=True)
 class RunResult:
     status: str
@@ -170,10 +173,19 @@ class SessionOrchestrator:
 
     def run(self, *, stream_messages: list[dict]) -> RunResult:
         self._session_id, self._run_id, resumed = self._resolve_session_and_run()
-        self._seq = self.transcript_store.get_next_seq(self._session_id) - 1
+        next_seq = self.transcript_store.get_next_seq(self._session_id)
+        self._seq = next_seq - 1
         self._last_persisted_event_id = self.transcript_store.get_last_persisted_event_id(self._session_id)
         self._tool_call_counter = 0
         self._load_permission_decisions(stream_messages)
+
+        if next_seq == 1:
+            _SESSION_REPLAY_STATE[self._session_id] = {"allow": set(), "deny": set()}
+        replay_state = _SESSION_REPLAY_STATE.setdefault(self._session_id, {"allow": set(), "deny": set()})
+        self.tool_executor.bind_session_replay_state(
+            allow_hashes=replay_state["allow"],
+            deny_hashes=replay_state["deny"],
+        )
 
         if resumed:
             self._emit(
