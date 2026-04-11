@@ -1,9 +1,21 @@
 from __future__ import annotations
 
+import shlex
 import subprocess
 from typing import Any
 
 from ccr.tools.base import BaseTool, ToolExecutionContext
+
+
+_BASH_TIMEOUT_SECONDS = 5
+
+
+def _to_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
 
 
 class BashTool(BaseTool):
@@ -12,15 +24,68 @@ class BashTool(BaseTool):
 
     def execute(self, tool_input: dict[str, Any], context: ToolExecutionContext) -> dict[str, Any]:
         command = str(tool_input["command"])
-        completed = subprocess.run(
-            command,
-            shell=True,
-            cwd=context.cwd,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            argv = shlex.split(command)
+        except ValueError as exc:
+            return {
+                "status": "error",
+                "exit_code": None,
+                "stdout": "",
+                "stderr": "",
+                "error": {
+                    "code": "COMMAND_EXECUTION_FAILED",
+                    "message": f"failed to parse command: {exc}",
+                },
+            }
+
+        if not argv:
+            return {
+                "status": "error",
+                "exit_code": None,
+                "stdout": "",
+                "stderr": "",
+                "error": {
+                    "code": "COMMAND_EXECUTION_FAILED",
+                    "message": "failed to execute command: empty command",
+                },
+            }
+
+        try:
+            completed = subprocess.run(
+                argv,
+                shell=False,
+                cwd=context.cwd,
+                capture_output=True,
+                text=True,
+                timeout=_BASH_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            timeout_stdout = exc.stdout if exc.stdout is not None else exc.output
+            return {
+                "status": "error",
+                "exit_code": None,
+                "stdout": _to_text(timeout_stdout),
+                "stderr": _to_text(exc.stderr),
+                "error": {
+                    "code": "COMMAND_TIMEOUT",
+                    "message": f"command timed out after {_BASH_TIMEOUT_SECONDS} seconds",
+                },
+            }
+        except (OSError, subprocess.SubprocessError) as exc:
+            return {
+                "status": "error",
+                "exit_code": None,
+                "stdout": "",
+                "stderr": "",
+                "error": {
+                    "code": "COMMAND_EXECUTION_FAILED",
+                    "message": f"failed to execute command: {exc}",
+                },
+            }
+
+        status = "success" if completed.returncode == 0 else "error"
         return {
-            "status": "success",
+            "status": status,
             "exit_code": completed.returncode,
             "stdout": completed.stdout,
             "stderr": completed.stderr,

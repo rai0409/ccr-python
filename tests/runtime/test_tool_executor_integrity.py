@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import io
 import json
+import shlex
+import sys
+from pathlib import Path
+from unittest import mock
 
 from ccr.cli import main
 from ccr.cli.main import run_cli
 from ccr.policy.engine import PermissionEngine
 from ccr.storage.transcript_store import TranscriptStore
 from ccr.tools.executor import ToolExecutor, ToolIntent
+from ccr.tools.registry import ToolRegistry
 from helpers.fake_provider import ScriptedProvider
 
 
@@ -566,6 +571,408 @@ def test_tool_executor_mixed_source_persistent_deny_over_session_allow() -> None
         "tool_execution_finished",
     ]
     assert emitted[1]["payload"]["reason_code"] == "persistent_rule_deny"
+
+
+def test_tool_executor_write_success_and_lifecycle() -> None:
+    emitted: list[dict] = []
+    target = Path("/tmp/ccr_ws/write.txt")
+    if target.exists():
+        target.unlink()
+
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome = executor.execute(
+        intent=ToolIntent(
+            tool_call_id="TC1",
+            tool_name="Write",
+            tool_input={"path": "/tmp/ccr_ws/write.txt", "content": "alpha\n"},
+        ),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_once",
+    )
+
+    assert outcome.status == "success"
+    assert target.read_text(encoding="utf-8") == "alpha\n"
+    assert [e["type"] for e in emitted] == [
+        "tool_call_requested",
+        "tool_permission_required",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "tool_result",
+        "tool_execution_finished",
+    ]
+    assert emitted[4]["payload"]["result"]["status"] == "success"
+
+
+def test_tool_executor_edit_success_replaces_first_match() -> None:
+    emitted: list[dict] = []
+    target = Path("/tmp/ccr_ws/edit.txt")
+    target.write_text("one two one\n", encoding="utf-8")
+
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome = executor.execute(
+        intent=ToolIntent(
+            tool_call_id="TC1",
+            tool_name="Edit",
+            tool_input={"path": "/tmp/ccr_ws/edit.txt", "find": "one", "replace": "ONE"},
+        ),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_once",
+    )
+
+    assert outcome.status == "success"
+    assert target.read_text(encoding="utf-8") == "ONE two one\n"
+    assert [e["type"] for e in emitted] == [
+        "tool_call_requested",
+        "tool_permission_required",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "tool_result",
+        "tool_execution_finished",
+    ]
+    assert emitted[4]["payload"]["result"]["status"] == "success"
+
+
+def test_tool_executor_edit_failure_when_find_target_missing() -> None:
+    emitted: list[dict] = []
+    target = Path("/tmp/ccr_ws/edit_missing_target.txt")
+    target.write_text("alpha beta\n", encoding="utf-8")
+
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome = executor.execute(
+        intent=ToolIntent(
+            tool_call_id="TC1",
+            tool_name="Edit",
+            tool_input={"path": "/tmp/ccr_ws/edit_missing_target.txt", "find": "gamma", "replace": "G"},
+        ),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_once",
+    )
+
+    assert outcome.status == "error"
+    assert target.read_text(encoding="utf-8") == "alpha beta\n"
+    assert emitted[4]["payload"]["result"]["status"] == "error"
+    assert emitted[4]["payload"]["result"]["error"]["code"] == "FIND_TARGET_NOT_FOUND"
+
+
+def test_tool_executor_bash_success_runs_in_cwd() -> None:
+    emitted: list[dict] = []
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome = executor.execute(
+        intent=ToolIntent(tool_call_id="TC1", tool_name="Bash", tool_input={"command": "pwd"}),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_once",
+    )
+
+    assert outcome.status == "success"
+    result = emitted[4]["payload"]["result"]
+    assert result["status"] == "success"
+    assert result["exit_code"] == 0
+    assert str(result["stdout"]).strip() == "/tmp/ccr_ws"
+    assert [e["type"] for e in emitted] == [
+        "tool_call_requested",
+        "tool_permission_required",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "tool_result",
+        "tool_execution_finished",
+    ]
+
+
+def test_tool_executor_bash_nonzero_exit_returns_error_with_exit_code() -> None:
+    emitted: list[dict] = []
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+    command = f"{shlex.quote(sys.executable)} -c \"import sys; sys.exit(7)\""
+
+    outcome = executor.execute(
+        intent=ToolIntent(tool_call_id="TC1", tool_name="Bash", tool_input={"command": command}),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_once",
+    )
+
+    assert outcome.status == "error"
+    result = emitted[4]["payload"]["result"]
+    assert result["status"] == "error"
+    assert result["exit_code"] == 7
+    assert "stdout" in result
+    assert "stderr" in result
+
+
+def test_tool_executor_bash_invalid_command_returns_execution_failed_error() -> None:
+    emitted: list[dict] = []
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome = executor.execute(
+        intent=ToolIntent(
+            tool_call_id="TC1",
+            tool_name="Bash",
+            tool_input={"command": "ccr_nonexistent_command_12345"},
+        ),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_once",
+    )
+
+    assert outcome.status == "error"
+    result = emitted[4]["payload"]["result"]
+    assert result["status"] == "error"
+    assert result["exit_code"] is None
+    assert result["error"]["code"] == "COMMAND_EXECUTION_FAILED"
+
+
+def test_tool_executor_bash_timeout_returns_timeout_error() -> None:
+    emitted: list[dict] = []
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+    command = f"{shlex.quote(sys.executable)} -c \"import time; time.sleep(0.2)\""
+
+    with mock.patch("ccr.tools.builtins.bash_tool._BASH_TIMEOUT_SECONDS", 0.01):
+        outcome = executor.execute(
+            intent=ToolIntent(tool_call_id="TC1", tool_name="Bash", tool_input={"command": command}),
+            mode="ask",
+            interactive_available=True,
+            turn_index=1,
+            resolve_permission=lambda _tcid: "allow_once",
+        )
+
+    assert outcome.status == "error"
+    result = emitted[4]["payload"]["result"]
+    assert result["status"] == "error"
+    assert result["exit_code"] is None
+    assert result["error"]["code"] == "COMMAND_TIMEOUT"
+
+
+def test_tool_executor_permission_deny_blocks_bash_execution() -> None:
+    emitted: list[dict] = []
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome = executor.execute(
+        intent=ToolIntent(tool_call_id="TC1", tool_name="Bash", tool_input={"command": "pwd"}),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "deny_once",
+    )
+
+    assert outcome.status == "denied"
+    assert [e["type"] for e in emitted] == [
+        "tool_call_requested",
+        "tool_permission_required",
+        "tool_permission_decided",
+        "tool_result",
+        "tool_execution_finished",
+    ]
+
+
+def test_tool_executor_bash_allow_session_replay_avoids_permission_required() -> None:
+    first: list[dict] = []
+    second: list[dict] = []
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: first.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome1 = executor.execute(
+        intent=ToolIntent(tool_call_id="TC1", tool_name="Bash", tool_input={"command": "pwd"}),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_session",
+    )
+    assert outcome1.status == "success"
+
+    executor.emit = lambda event_type, **kwargs: second.append({"type": event_type, **kwargs})  # type: ignore[method-assign]
+    outcome2 = executor.execute(
+        intent=ToolIntent(tool_call_id="TC2", tool_name="Bash", tool_input={"command": "pwd"}),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: None,
+    )
+    assert outcome2.status == "success"
+    assert [e["type"] for e in second] == [
+        "tool_call_requested",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "tool_result",
+        "tool_execution_finished",
+    ]
+    assert second[1]["payload"]["reason_code"] == "session_rule_allow"
+
+
+def test_tool_executor_permission_deny_blocks_write_execution() -> None:
+    emitted: list[dict] = []
+    target = Path("/tmp/ccr_ws/blocked_write.txt")
+    if target.exists():
+        target.unlink()
+
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome = executor.execute(
+        intent=ToolIntent(
+            tool_call_id="TC1",
+            tool_name="Write",
+            tool_input={"path": "/tmp/ccr_ws/blocked_write.txt", "content": "blocked"},
+        ),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "deny_once",
+    )
+
+    assert outcome.status == "denied"
+    assert not target.exists()
+    assert [e["type"] for e in emitted] == [
+        "tool_call_requested",
+        "tool_permission_required",
+        "tool_permission_decided",
+        "tool_result",
+        "tool_execution_finished",
+    ]
+
+
+def test_tool_executor_replay_allows_write_without_permission_required() -> None:
+    first: list[dict] = []
+    second: list[dict] = []
+    target = Path("/tmp/ccr_ws/replay_write.txt")
+
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: first.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome1 = executor.execute(
+        intent=ToolIntent(
+            tool_call_id="TC1",
+            tool_name="Write",
+            tool_input={"path": "/tmp/ccr_ws/replay_write.txt", "content": "v1"},
+        ),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_session",
+    )
+    assert outcome1.status == "success"
+
+    executor.emit = lambda event_type, **kwargs: second.append({"type": event_type, **kwargs})  # type: ignore[method-assign]
+    outcome2 = executor.execute(
+        intent=ToolIntent(
+            tool_call_id="TC2",
+            tool_name="Write",
+            tool_input={"path": "/tmp/ccr_ws/replay_write.txt", "content": "v1"},
+        ),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: None,
+    )
+    assert outcome2.status == "success"
+    assert target.read_text(encoding="utf-8") == "v1"
+    assert [e["type"] for e in second] == [
+        "tool_call_requested",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "tool_result",
+        "tool_execution_finished",
+    ]
+    assert second[1]["payload"]["reason_code"] == "session_rule_allow"
+
+
+def test_tool_executor_hard_boundary_denies_out_of_root_write() -> None:
+    emitted: list[dict] = []
+    out_path = Path("/tmp/ccr_outside_write.txt")
+    if out_path.exists():
+        out_path.unlink()
+
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome = executor.execute(
+        intent=ToolIntent(
+            tool_call_id="TC1",
+            tool_name="Write",
+            tool_input={"path": str(out_path), "content": "x"},
+        ),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_once",
+    )
+    assert outcome.status == "denied"
+    assert not out_path.exists()
+    assert [e["type"] for e in emitted] == [
+        "tool_call_requested",
+        "tool_permission_decided",
+        "tool_result",
+        "tool_execution_finished",
+    ]
+    assert emitted[1]["payload"]["reason_code"] == "hard_boundary_path_outside_root"
 
 
 def test_runtime_ask_mode_stream_allow_once_persists_permission_required(monkeypatch) -> None:
