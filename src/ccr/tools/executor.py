@@ -36,10 +36,24 @@ class ToolExecutor:
         self.context = ToolExecutionContext(cwd=cwd)
         self._session_allow_hashes: set[str] = set()
         self._session_deny_hashes: set[str] = set()
+        self._persistent_allow_hashes: set[str] = set()
+        self._persistent_deny_hashes: set[str] = set()
+        self._persist_persistent_rule: Callable[[str, str], None] | None = None
 
     def bind_session_replay_state(self, *, allow_hashes: set[str], deny_hashes: set[str]) -> None:
         self._session_allow_hashes = allow_hashes
         self._session_deny_hashes = deny_hashes
+
+    def bind_persistent_replay_state(
+        self,
+        *,
+        allow_hashes: set[str],
+        deny_hashes: set[str],
+        persist_rule: Callable[[str, str], None] | None = None,
+    ) -> None:
+        self._persistent_allow_hashes = allow_hashes
+        self._persistent_deny_hashes = deny_hashes
+        self._persist_persistent_rule = persist_rule
 
     def _apply_session_replay(self, decision: PermissionDecision) -> PermissionDecision:
         if decision.reason_code == "hard_boundary_path_outside_root":
@@ -54,6 +68,16 @@ class ToolExecutor:
                 risk_label=decision.risk_label,
                 request_hash=decision.request_hash,
             )
+        if decision.request_hash in self._persistent_deny_hashes:
+            return PermissionDecision(
+                mode=decision.mode,
+                decision="deny",
+                reason_code="persistent_rule_deny",
+                precedence_rank=2,
+                decision_source="persistent_rule",
+                risk_label=decision.risk_label,
+                request_hash=decision.request_hash,
+            )
         if decision.request_hash in self._session_allow_hashes:
             return PermissionDecision(
                 mode=decision.mode,
@@ -61,6 +85,16 @@ class ToolExecutor:
                 reason_code="session_rule_allow",
                 precedence_rank=3,
                 decision_source="session_rule",
+                risk_label=decision.risk_label,
+                request_hash=decision.request_hash,
+            )
+        if decision.request_hash in self._persistent_allow_hashes:
+            return PermissionDecision(
+                mode=decision.mode,
+                decision="allow",
+                reason_code="persistent_rule_allow",
+                precedence_rank=3,
+                decision_source="persistent_rule",
                 risk_label=decision.risk_label,
                 request_hash=decision.request_hash,
             )
@@ -126,6 +160,19 @@ class ToolExecutor:
                     request_hash=decision.request_hash,
                 )
                 self._session_allow_hashes.add(decision.request_hash)
+            elif normalized == "allow_persistent":
+                decision = PermissionDecision(
+                    mode=decision.mode,
+                    decision="allow",
+                    reason_code=decision.reason_code,
+                    precedence_rank=decision.precedence_rank,
+                    decision_source=decision.decision_source,
+                    risk_label=decision.risk_label,
+                    request_hash=decision.request_hash,
+                )
+                self._persistent_allow_hashes.add(decision.request_hash)
+                if self._persist_persistent_rule is not None:
+                    self._persist_persistent_rule(decision.request_hash, "allow")
             elif normalized == "deny_once":
                 decision = PermissionDecision(
                     mode=decision.mode,
@@ -147,6 +194,19 @@ class ToolExecutor:
                     request_hash=decision.request_hash,
                 )
                 self._session_deny_hashes.add(decision.request_hash)
+            elif normalized == "deny_persistent":
+                decision = PermissionDecision(
+                    mode=decision.mode,
+                    decision="deny",
+                    reason_code=decision.reason_code,
+                    precedence_rank=decision.precedence_rank,
+                    decision_source=decision.decision_source,
+                    risk_label=decision.risk_label,
+                    request_hash=decision.request_hash,
+                )
+                self._persistent_deny_hashes.add(decision.request_hash)
+                if self._persist_persistent_rule is not None:
+                    self._persist_persistent_rule(decision.request_hash, "deny")
             else:
                 decision = PermissionDecision(
                     mode=decision.mode,

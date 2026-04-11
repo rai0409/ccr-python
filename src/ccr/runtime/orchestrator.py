@@ -9,6 +9,7 @@ from ccr.model.provider_base import ModelRequest, ProviderBase
 from ccr.model.retry_fallback import RetryFallbackManager
 from ccr.model.stream_adapter import ModelStreamAdapter
 from ccr.policy.engine import PermissionEngine
+from ccr.storage.permission_rule_store import PermissionRuleStore
 from ccr.storage.session_index import SessionIndex
 from ccr.storage.transcript_store import TranscriptStore
 from ccr.tools.executor import ToolExecutor, ToolIntent
@@ -61,6 +62,10 @@ class SessionOrchestrator:
             permission_engine=self.permission_engine,
             emit=self._emit,
             cwd=config.cwd,
+        )
+        self.permission_rule_store = PermissionRuleStore(
+            config.transcript_dir,
+            enabled=not config.no_session_persistence,
         )
 
         self._seq = 0
@@ -185,6 +190,12 @@ class SessionOrchestrator:
         self.tool_executor.bind_session_replay_state(
             allow_hashes=replay_state["allow"],
             deny_hashes=replay_state["deny"],
+        )
+        persistent_allow_hashes, persistent_deny_hashes = self.permission_rule_store.load_hash_sets()
+        self.tool_executor.bind_persistent_replay_state(
+            allow_hashes=persistent_allow_hashes,
+            deny_hashes=persistent_deny_hashes,
+            persist_rule=self.permission_rule_store.append_rule,
         )
 
         if resumed:
