@@ -1,84 +1,258 @@
-# ccr-python status
+# ccr-python
 
-## current phase
-Phase 2B implemented (interactive permission ask flow on top of Phase 2A baseline).
+Clean-room runtime core for production-oriented headless coding agents in Python.
 
-## frozen decisions
-- Broad spec is intentionally maintained.
-- Broad golden-tests inventory is intentionally maintained.
-- Active implementation must proceed by narrow subsets only.
-- Phase 1 includes transcript durability:
-  - append-only transcript write
-  - seq allocation
-  - parent linkage
-  - assistant_delta is stream-only and never persisted
-  - minimal single-writer safety
-  - session index update
-  - full resume reconstruction is out of Phase 1
-- provider_client.py is not part of Phase 1:
-  - use provider abstraction + fake/scripted provider only
-  - create no concrete network client in Phase 1
-  - seam/stub only if the file tree requires it
-- Golden source-of-truth:
-  - docs/golden-tests.yaml is canonical
-  - fixtures/golden/golden_inventory_v1.yaml is derived test input
-  - derived fixture files must not become the authoritative source
+## TL;DR
 
-## current state
-- Clean-room / behavior-first direction fixed
-- Unified spec treated as source of truth
-- Golden test spec treated as source of truth
-- Phase 1 runnable core implemented
-- Current implemented core includes:
-  - CLI parser and entry
-  - text/json/stream-json I/O modes
-  - SessionOrchestrator
-  - EventEnvelope / EventBus
-  - append-only transcript baseline
-  - session index update / continue baseline
-  - fake provider path
-  - read-only tool stack (Read / LS / Glob / Grep)
-  - minimal permission decisions:
-    - hard boundary deny
-    - auto_safe allow
-    - ask_unavailable deny
-  - tool lifecycle event persistence
-  - interactive ask flow:
-    - `tool_permission_required`
-    - one-shot `allow_once` / `deny_once`
-- Not yet implemented:
-  - session/persistent permission rules
-  - Bash/Edit/Write tool execution
-  - full resume reconstruction
-  - real provider client
-  - full retry/fallback/interrupt behavior
+- deterministic runtime core
+- append-only transcript persistence
+- permission-gated tool execution
+- replayable decisions (session / persistent)
+- mutation-capable local tools (Write / Edit / Bash)
 
-## next implementation target
-Phase 2C+ (frozen, not yet active).
+---
 
-## unresolved assumptions
-- stream-json permission_decision payload finalization beyond Phase 2A
-- full source priority ordering final confirmation
-- tool concurrency policy beyond read-only group behavior
-- build/release metadata not yet fixed
+## What this is
 
-## implementation order
-1. Maintain broad spec and broad golden inventory unchanged
-2. Introduce current-implementation document
-3. Introduce Phase 2A active-scope document
-4. Tag or subset golden tests for Phase 2A
-5. Implement Phase 2A only
-6. Run Phase 2A subset
-7. Audit lifecycle invariants before moving to Phase 2B
+`ccr-python` is a clean-room implementation of a **headless coding-agent runtime core** with a strong focus on:
 
-## stop conditions
-Do not begin:
-- Bash
-- Edit
+- deterministic runtime behavior
+- append-only event persistence
+- explicit permission decisions
+- auditable tool execution lifecycle
+- narrow, testable implementation slices
+
+This is not a prompt loop or wrapper.
+It is a **runtime layer** intended to sit underneath agent systems.
+
+---
+
+## Who this is for
+
+- engineers building coding-agent backends
+- teams building internal automation systems
+- developers needing auditable tool execution
+- systems requiring permission-gated local execution
+
+---
+
+## Why it matters
+
+Most agent repositories provide:
+- chat loop
+- tool calling
+
+Very few provide:
+- deterministic lifecycle ordering
+- replayable permission decisions
+- append-only audit trail
+- workspace boundary enforcement
+- mutation-capable tools with policy control
+
+`ccr-python` is focused on that missing layer.
+
+---
+
+## Current Status
+
+The repository currently contains a **deterministic runtime core with integrated execution, persistence, and policy layers**.
+
+### Implemented
+
+- CLI (text / json / stream-json)
+- SessionOrchestrator
+- EventEnvelope / EventBus
+- append-only transcript persistence
+- session continuity baseline
+- tool registry + executor
+
+### Built-in tools
+
+Read:
+- Read
+- LS
+- Glob
+- Grep
+
+Mutation / execution:
 - Write
-- persistent/session rule persistence
-- audit log fail-closed
-- full resume loader
-- retry/fallback parity
-- interrupt propagation
-until Phase 2A gates are green
+- Edit
+- Bash
+
+### Permission system
+
+- hard boundary deny (workspace root)
+- auto_safe allow (read tools)
+- ask flow
+- ask_unavailable deny
+
+Decision types:
+- allow_once / deny_once
+- allow_session / deny_session
+- allow_persistent / deny_persistent
+
+Replay:
+- session replay
+- persistent replay
+- deny precedence
+- hard-boundary precedence
+
+### Persistence
+
+- append-only JSONL transcript
+- `record_id == event_id`
+- `parent_id == parent_event_id`
+- permission decision persistence
+- persistent permission rule store
+
+---
+
+## What this means
+
+This runtime already supports:
+
+- controlled local tool execution
+- audit-friendly execution logs
+- deterministic behavior
+- replayable decisions
+- mutation-capable workflows
+
+---
+
+## What this does NOT mean (important)
+
+This repository does **not** yet provide:
+
+- full security sandbox
+- full recovery/resume semantics
+- real provider integration
+- production deployment layer
+- multi-tenant runtime
+
+Bash execution is intentionally narrow and **not a security sandbox**.
+
+---
+
+## Core capabilities
+
+### 1. Deterministic runtime
+
+Explicit event-driven lifecycle.
+No hidden execution paths.
+
+---
+
+### 2. Append-only transcript
+
+- JSONL persistence
+- immutable history
+- replay-friendly structure
+
+---
+
+### 3. Permission-gated execution
+
+- explicit allow/deny decisions
+- replayable policy
+- workspace boundary enforcement
+
+---
+
+### 4. Local tool execution
+
+Unified execution model for:
+
+- filesystem tools
+- mutation tools
+- command execution (Bash)
+
+---
+
+### 5. Test-backed behavior
+
+Coverage includes:
+
+- lifecycle ordering
+- permission flow
+- replay semantics
+- precedence rules
+- tool success/failure paths
+- Bash timeout/error handling
+
+---
+
+## Architecture
+
+### Runtime
+- SessionOrchestrator
+- EventEnvelope
+- EventBus
+
+### Persistence
+- transcript store (append-only)
+- session index
+- permission rule store
+
+### Policy
+- permission engine
+- replay matching
+- boundary enforcement
+
+### Tools
+- registry
+- executor
+- built-in tools
+
+### Provider
+- abstraction layer
+- fake/scripted provider
+
+---
+
+## Source of truth
+
+- `docs/spec.md` → full intended behavior
+- `docs/status.md` → current implementation state
+- `docs/current-implementation.md` → implemented details
+
+---
+
+## Development philosophy
+
+- deterministic over clever
+- append-only over mutable state
+- explicit policy over implicit trust
+- implementation-backed claims only
+- narrow scope per iteration
+
+---
+
+## Roadmap direction
+
+1. keep docs aligned with main
+2. harden Bash confinement
+3. implement resume/recovery slice
+4. add provider realism
+5. expand retry/fallback later
+
+---
+
+## Install & Run
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -e '.[test]'
+pytest -q
+python -m ccr.cli.main -p "hello"
+printf '{"type":"user_message","content":"hello"}\n' \
+| python -m ccr.cli.main -p --input-format stream-json --output-format stream-json
+Limitations
+provider is fake/scripted
+resume/recovery incomplete
+Bash is not a sandbox
+no hosted runtime layer
+License
+
+Source-available for research and evaluation.
+Commercial use requires a separate license.
