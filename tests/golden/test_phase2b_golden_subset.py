@@ -141,3 +141,143 @@ def _run_variant(case: dict[str, Any], variant: str | None, monkeypatch: pytest.
 @pytest.mark.parametrize("case", _load_cases(), ids=lambda c: str(c["test_name"]))
 def test_phase2b_golden_subset(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
     _run_variant(case, None, monkeypatch)
+
+
+def test_phase2c_prompt_a_session_replay_allow(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        main,
+        "PROVIDER_FACTORY",
+        lambda _cfg: ScriptedProvider(
+            [
+                {"emit_tool": {"tool_name": "Read", "input": {"path": "/tmp/ccr_ws/a.txt"}}},
+                {"emit_tool": {"tool_name": "Read", "input": {"path": "/tmp/ccr_ws/a.txt"}}},
+                {"emit": "assistant_message", "content": "OK"},
+            ]
+        ),
+    )
+
+    Path("/tmp/ccr_ws/a.txt").write_text("alpha\n", encoding="utf-8")
+
+    out = io.StringIO()
+    err = io.StringIO()
+    code = run_cli(
+        argv=["-p", "--permission-mode", "ask", "--input-format", "stream-json", "--cwd", "/tmp/ccr_ws", "--transcript-dir", "/tmp/ccr_sessions"],
+        stdin=io.StringIO(
+            "\n".join(
+                [
+                    json.dumps({"type": "user_message", "content": "read twice"}),
+                    json.dumps({"type": "permission_decision", "tool_call_id": "TC1", "decision": "allow_session"}),
+                ]
+            )
+            + "\n"
+        ),
+        stdout=out,
+        stderr=err,
+    )
+    assert code == 0
+    assert err.getvalue() == ""
+
+    records = TranscriptStore("/tmp/ccr_sessions").load_records("S1")
+    assert_record_identity(records)
+    assert_parent_chain(records)
+    assert [rec["type"] for rec in records] == [
+        "session_start",
+        "user_message",
+        "tool_call_requested",
+        "tool_permission_required",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "tool_result",
+        "tool_execution_finished",
+        "tool_call_requested",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "tool_result",
+        "tool_execution_finished",
+        "assistant_message",
+        "session_completed",
+    ]
+    decided = [rec for rec in records if rec["type"] == "tool_permission_decided"]
+    assert len(decided) == 2
+    assert decided[0]["payload"]["decision"] == "allow"
+    assert decided[1]["payload"]["decision"] == "allow"
+    assert decided[1]["payload"]["reason_code"] == "session_rule_allow"
+
+
+def test_phase2c_prompt_b_persistent_replay_allow(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        main,
+        "PROVIDER_FACTORY",
+        lambda _cfg: ScriptedProvider(
+            [{"emit_tool": {"tool_name": "Read", "input": {"path": "/tmp/ccr_ws/a.txt"}}}, {"emit": "assistant_message", "content": "OK"}]
+        ),
+    )
+
+    Path("/tmp/ccr_ws/a.txt").write_text("alpha\n", encoding="utf-8")
+
+    code1 = run_cli(
+        argv=[
+            "-p",
+            "--permission-mode",
+            "ask",
+            "--input-format",
+            "stream-json",
+            "--cwd",
+            "/tmp/ccr_ws",
+            "--transcript-dir",
+            "/tmp/ccr_sessions",
+            "--session-id",
+            "S_PERSIST_1",
+        ],
+        stdin=io.StringIO(
+            "\n".join(
+                [
+                    json.dumps({"type": "user_message", "content": "seed persistent allow"}),
+                    json.dumps({"type": "permission_decision", "tool_call_id": "TC1", "decision": "allow_persistent"}),
+                ]
+            )
+            + "\n"
+        ),
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+    assert code1 == 0
+
+    code2 = run_cli(
+        argv=[
+            "-p",
+            "--permission-mode",
+            "ask",
+            "--input-format",
+            "stream-json",
+            "--cwd",
+            "/tmp/ccr_ws",
+            "--transcript-dir",
+            "/tmp/ccr_sessions",
+            "--session-id",
+            "S_PERSIST_2",
+        ],
+        stdin=io.StringIO(json.dumps({"type": "user_message", "content": "read"}) + "\n"),
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+    )
+    assert code2 == 0
+
+    records = TranscriptStore("/tmp/ccr_sessions").load_records("S_PERSIST_2")
+    assert_record_identity(records)
+    assert_parent_chain(records)
+    assert [rec["type"] for rec in records] == [
+        "session_start",
+        "user_message",
+        "tool_call_requested",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "tool_result",
+        "tool_execution_finished",
+        "assistant_message",
+        "session_completed",
+    ]
+    decided = [rec for rec in records if rec["type"] == "tool_permission_decided"]
+    assert len(decided) == 1
+    assert decided[0]["payload"]["decision"] == "allow"
+    assert decided[0]["payload"]["reason_code"] == "persistent_rule_allow"

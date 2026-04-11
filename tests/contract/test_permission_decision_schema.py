@@ -42,3 +42,35 @@ def test_permission_decision_schema_ask_valid() -> None:
         },
         schema,
     )
+
+
+def test_permission_decision_schema_session_rule_valid() -> None:
+    schema = _load_schema("permission_decision.schema.json")
+    validate(
+        {
+            "mode": "ask",
+            "decision": "allow",
+            "reason_code": "session_rule_allow",
+            "precedence_rank": 3,
+            "decision_source": "session_rule",
+            "risk_label": "safe_read",
+            "request_hash": "sha256:xyz",
+        },
+        schema,
+    )
+
+
+def test_permission_decision_schema_persistent_rule_valid() -> None:
+    schema = _load_schema("permission_decision.schema.json")
+    validate(
+        {
+            "mode": "ask",
+            "decision": "deny",
+            "reason_code": "persistent_rule_deny",
+            "precedence_rank": 2,
+            "decision_source": "persistent_rule",
+            "risk_label": "safe_read",
+            "request_hash": "sha256:persist",
+        },
+        schema,
+    )
