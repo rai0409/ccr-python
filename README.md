@@ -264,3 +264,33 @@ Create a virtual environment and install the project with test dependencies:
 python -m venv .venv
 . .venv/bin/activate
 pip install -e '.[test]'
+
+Run tests
+pytest -q
+Example usage
+
+Text mode:
+
+python -m ccr.cli.main -p "hello"
+
+JSON output mode:
+
+python -m ccr.cli.main -p "hello" --output-format json
+
+Stream-json mode:
+
+printf '{"type":"user_message","content":"hello"}\n' | python -m ccr.cli.main -p --input-format stream-json --output-format stream-json
+Limitations
+
+Important current limitations:
+
+provider behavior is still fake/scripted
+resume/recovery is incomplete
+Bash execution is a narrow baseline, not a full sandbox
+real provider integration is incomplete
+retry/fallback/interrupt behavior is not yet production-complete
+License
+
+This repository is source-available for personal study, research, and evaluation.
+Commercial use requires prior written permission and a separate paid license.
+See LICENSE for details.
