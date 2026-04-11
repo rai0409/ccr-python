@@ -710,6 +710,38 @@ def test_tool_executor_bash_success_runs_in_cwd() -> None:
     ]
 
 
+def test_tool_executor_bash_out_of_workspace_path_argument_rejected() -> None:
+    emitted: list[dict] = []
+    executor = ToolExecutor(
+        registry=ToolRegistry(),
+        permission_engine=PermissionEngine(cwd="/tmp/ccr_ws"),
+        emit=lambda event_type, **kwargs: emitted.append({"type": event_type, **kwargs}),
+        cwd="/tmp/ccr_ws",
+    )
+
+    outcome = executor.execute(
+        intent=ToolIntent(tool_call_id="TC1", tool_name="Bash", tool_input={"command": "cat /etc/hosts"}),
+        mode="ask",
+        interactive_available=True,
+        turn_index=1,
+        resolve_permission=lambda _tcid: "allow_once",
+    )
+
+    assert outcome.status == "error"
+    result = emitted[4]["payload"]["result"]
+    assert result["status"] == "error"
+    assert result["exit_code"] is None
+    assert result["error"]["code"] == "COMMAND_PATH_OUTSIDE_ROOT"
+    assert [e["type"] for e in emitted] == [
+        "tool_call_requested",
+        "tool_permission_required",
+        "tool_permission_decided",
+        "tool_execution_started",
+        "tool_result",
+        "tool_execution_finished",
+    ]
+
+
 def test_tool_executor_bash_nonzero_exit_returns_error_with_exit_code() -> None:
     emitted: list[dict] = []
     executor = ToolExecutor(
