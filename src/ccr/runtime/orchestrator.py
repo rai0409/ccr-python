@@ -9,10 +9,12 @@ from ccr.model.provider_base import ModelRequest, ProviderBase
 from ccr.model.retry_fallback import RetryFallbackManager
 from ccr.model.stream_adapter import ModelStreamAdapter
 from ccr.policy.engine import PermissionEngine
+from ccr.runtime.recovery import classify_tool_call_recovery
+from ccr.runtime.recovery_policy import decide_recovery_action
 from ccr.storage.permission_rule_store import PermissionRuleStore
 from ccr.storage.session_index import SessionIndex
 from ccr.storage.transcript_store import TranscriptStore
-from ccr.tools.executor import ToolExecutor, ToolIntent
+from ccr.tools.executor import ToolExecutionOutcome, ToolExecutor, ToolIntent
 from ccr.tools.registry import ToolRegistry
 from ccr.util.ids import new_run_id, new_session_id
 from ccr.util.time import now_rfc3339
@@ -176,6 +178,85 @@ class SessionOrchestrator:
             self._permission_decisions.pop(tool_call_id, None)
         return value
 
+    def _failure_result_for_tool_outcome(self, *, outcome: ToolExecutionOutcome, turn_index: int) -> RunResult | None:
+        if outcome.status == "denied":
+            if outcome.decision.reason_code == "ask_unavailable":
+                exit_code = exit_codes.PERMISSION_UNAVAILABLE
+            else:
+                exit_code = exit_codes.PERMISSION_DENIED
+            self._emit(
+                "session_failed",
+                payload={"error_code": "PERMISSION_DENIED", "error_message": outcome.decision.reason_code},
+                turn_index=turn_index,
+            )
+            self.session_index.update(session_id=self._session_id, cwd=self.config.cwd, ts=now_rfc3339())
+            return RunResult(
+                status="failed",
+                exit_code=exit_code,
+                session_id=self._session_id,
+                run_id=self._run_id,
+                final_assistant_message=None,
+            )
+        if outcome.status != "success":
+            self._emit(
+                "session_failed",
+                payload={"error_code": "TOOL_RUNTIME_FAILURE", "error_message": "tool failed"},
+                turn_index=turn_index,
+            )
+            self.session_index.update(session_id=self._session_id, cwd=self.config.cwd, ts=now_rfc3339())
+            return RunResult(
+                status="failed",
+                exit_code=exit_codes.TOOL_RUNTIME_FAILURE,
+                session_id=self._session_id,
+                run_id=self._run_id,
+                final_assistant_message=None,
+            )
+        return None
+
+    def _recover_interrupted_safe_read_once(self, *, turn_index: int) -> ToolExecutionOutcome | None:
+        records = self.transcript_store.load_records(self._session_id)
+        last_request: dict[str, Any] | None = None
+        for rec in reversed(records):
+            if str(rec.get("type", "")) == "tool_call_requested":
+                last_request = rec
+                break
+        if last_request is None:
+            return None
+
+        tool_call_id = str(last_request.get("tool_call_id", ""))
+        if tool_call_id == "":
+            return None
+        payload = last_request.get("payload")
+        if not isinstance(payload, dict):
+            return None
+
+        tool_name = str(payload.get("tool_name", ""))
+        tool_input = payload.get("input")
+        if tool_name == "" or not isinstance(tool_input, dict):
+            return None
+
+        try:
+            recovery = classify_tool_call_recovery(records, tool_call_id)
+        except ValueError:
+            return None
+
+        action = decide_recovery_action(recovery, tool_name)
+        if action != "eligible_for_retry":
+            return None
+
+        outcome = self.tool_executor.execute(
+            intent=ToolIntent(
+                tool_call_id=self._next_tool_call_id(),
+                tool_name=tool_name,
+                tool_input=dict(tool_input),
+            ),
+            mode=self.config.permission_mode,
+            interactive_available=self._interactive_available(),
+            turn_index=turn_index,
+            resolve_permission=self._consume_permission_decision,
+        )
+        return outcome
+
     def run(self, *, stream_messages: list[dict]) -> RunResult:
         self._session_id, self._run_id, resumed = self._resolve_session_and_run()
         next_seq = self.transcript_store.get_next_seq(self._session_id)
@@ -226,11 +307,20 @@ class SessionOrchestrator:
             message_id="M_USER_1",
         )
 
+        recovery_had_tool_call = False
+        if resumed:
+            recovery_outcome = self._recover_interrupted_safe_read_once(turn_index=1)
+            if recovery_outcome is not None:
+                recovery_had_tool_call = True
+                failed = self._failure_result_for_tool_outcome(outcome=recovery_outcome, turn_index=1)
+                if failed is not None:
+                    return failed
+
         request = ModelRequest(prompt=prompt, model=self.config.model)
         chunks = self.retry_manager.run(self.provider, request).chunks
 
         final_message: str | None = None
-        had_tool_call = False
+        had_tool_call = recovery_had_tool_call
         assistant_msg_id = "M_ASSISTANT_1"
 
         for adapted in self.stream_adapter.adapt(chunks):
@@ -264,38 +354,9 @@ class SessionOrchestrator:
                     turn_index=1,
                     resolve_permission=self._consume_permission_decision,
                 )
-                if outcome.status == "denied":
-                    if outcome.decision.reason_code == "ask_unavailable":
-                        exit_code = exit_codes.PERMISSION_UNAVAILABLE
-                    else:
-                        exit_code = exit_codes.PERMISSION_DENIED
-                    self._emit(
-                        "session_failed",
-                        payload={"error_code": "PERMISSION_DENIED", "error_message": outcome.decision.reason_code},
-                        turn_index=1,
-                    )
-                    self.session_index.update(session_id=self._session_id, cwd=self.config.cwd, ts=now_rfc3339())
-                    return RunResult(
-                        status="failed",
-                        exit_code=exit_code,
-                        session_id=self._session_id,
-                        run_id=self._run_id,
-                        final_assistant_message=None,
-                    )
-                if outcome.status != "success":
-                    self._emit(
-                        "session_failed",
-                        payload={"error_code": "TOOL_RUNTIME_FAILURE", "error_message": "tool failed"},
-                        turn_index=1,
-                    )
-                    self.session_index.update(session_id=self._session_id, cwd=self.config.cwd, ts=now_rfc3339())
-                    return RunResult(
-                        status="failed",
-                        exit_code=exit_codes.TOOL_RUNTIME_FAILURE,
-                        session_id=self._session_id,
-                        run_id=self._run_id,
-                        final_assistant_message=None,
-                    )
+                failed = self._failure_result_for_tool_outcome(outcome=outcome, turn_index=1)
+                if failed is not None:
+                    return failed
             else:
                 raise RuntimeError(f"unsupported adapted kind: {adapted.kind}")
 
