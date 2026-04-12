@@ -51,3 +51,12 @@ def classify_tool_call_recovery(records: list[dict[str, Any]], tool_call_id: str
         return ToolCallRecovery(tool_call_id=tool_call_id, state="interrupted")
 
     raise ValueError(f"unclassifiable pre-start partial records for tool_call_id={tool_call_id}")
+
+
+def classify_tool_call_recovery_from_transcript(
+    store: Any,
+    session_id: str,
+    tool_call_id: str,
+) -> ToolCallRecovery:
+    records = store.load_records(session_id)
+    return classify_tool_call_recovery(records, tool_call_id)
