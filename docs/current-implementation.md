@@ -141,6 +141,7 @@ Implemented:
 - `denied` is the deny terminal path (without execution start), while `interrupted` means execution started and did not finish
 - `interrupted` classification means execution started with no execution-finished record; it does not resume execution
 - pre-start partial records remain unclassifiable and raise `ValueError`
+- deterministic recovery action policy classification exists via `decide_recovery_action(recovery, tool_name)`; this is semantic policy only and does not implement resume/restart or retry execution
 
 ## implementation-backed correctness claims
 
