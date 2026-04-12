@@ -139,9 +139,16 @@ Implemented:
   - loads persisted records via `store.load_records(session_id)`
   - delegates to `classify_tool_call_recovery(...)`
 - `denied` is the deny terminal path (without execution start), while `interrupted` means execution started and did not finish
-- `interrupted` classification means execution started with no execution-finished record; it does not resume execution
+- `interrupted` classification means execution started with no execution-finished record
 - pre-start partial records remain unclassifiable and raise `ValueError`
-- deterministic recovery action policy classification exists via `decide_recovery_action(recovery, tool_name)`; this is semantic policy only and does not implement resume/restart or retry execution
+- deterministic recovery action policy classification exists via `decide_recovery_action(recovery, tool_name)`
+- resumed runs (`--continue` / `--resume`) include one narrow recovery hook:
+  - checks the latest prior `tool_call_requested` in transcript
+  - classifies with `classify_tool_call_recovery(...)`
+  - maps action with `decide_recovery_action(...)`
+  - if action is `eligible_for_retry`, performs one explicit re-invocation through the normal `ToolExecutor` path
+- this slice is safe-read-only in effect (Read / LS / Glob / Grep via existing action policy), and does not auto-resume Write / Edit / Bash
+- no transcript rewrite/truncation is performed; behavior remains append-only
 
 ## implementation-backed correctness claims
 
@@ -156,6 +163,7 @@ The current implementation supports claims about:
 - interactive ask flow with one-shot / session / persistent decisions
 - session replay and persistent replay behavior
 - recovery classification for a single `tool_call_id` from in-memory records and persisted transcript records
+- minimal resumed-run interrupted safe-read retry path driven by existing classification + recovery action policy
 - tool execution success/failure/deny flows for:
   - Read
   - LS
@@ -179,6 +187,7 @@ The current test surface includes:
 - Edit success and failure behavior
 - Bash success, path rejection, nonzero exit, invalid command, timeout, and deny behavior
 - CLI stream-json replay behavior backed by transcript persistence
+- resumed-run recovery hook behavior for interrupted safe-read vs interrupted mutation/non-interrupted cases
 
 ## commercially relevant interpretation
 
@@ -192,8 +201,8 @@ What is already commercially meaningful:
 What is not yet ready to claim as commercially complete:
 - full security hardening
 - full recovery semantics
-- resumable interrupted execution
-- automatic retry/re-execution recovery flows
+- resumable interrupted execution beyond the current safe-read-only single retry slice
+- broader automatic retry/re-execution recovery flows
 - hosted deployment surface
 - real provider parity
 - sandbox-complete command execution
@@ -205,7 +214,7 @@ Not yet implemented:
 - full resume reconstruction
 - interrupted turn reconciliation
 - transcript tail truncation recovery
-- automatic retry/re-execution orchestration for interrupted tool calls
+- automatic retry/re-execution orchestration for interrupted tool calls beyond the current safe-read-only single retry slice
 - richer fork-session behavior beyond current baseline
 
 ### resilience
