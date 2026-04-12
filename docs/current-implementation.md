@@ -131,6 +131,17 @@ Implemented:
 - minimal stream adapter seam
 - minimal retry/fallback seam with no real fallback behavior yet
 
+### recovery classification slice
+Implemented:
+- `classify_tool_call_recovery(records, tool_call_id)`
+- recovery states are exactly: `completed`, `denied`, `interrupted`, `not_found`
+- `classify_tool_call_recovery_from_transcript(store, session_id, tool_call_id)` which only:
+  - loads persisted records via `store.load_records(session_id)`
+  - delegates to `classify_tool_call_recovery(...)`
+- `denied` is the deny terminal path (without execution start), while `interrupted` means execution started and did not finish
+- `interrupted` classification means execution started with no execution-finished record; it does not resume execution
+- pre-start partial records remain unclassifiable and raise `ValueError`
+
 ## implementation-backed correctness claims
 
 The current implementation supports claims about:
@@ -143,6 +154,7 @@ The current implementation supports claims about:
 - deterministic permission decision persistence
 - interactive ask flow with one-shot / session / persistent decisions
 - session replay and persistent replay behavior
+- recovery classification for a single `tool_call_id` from in-memory records and persisted transcript records
 - tool execution success/failure/deny flows for:
   - Read
   - LS
@@ -179,6 +191,8 @@ What is already commercially meaningful:
 What is not yet ready to claim as commercially complete:
 - full security hardening
 - full recovery semantics
+- resumable interrupted execution
+- automatic retry/re-execution recovery flows
 - hosted deployment surface
 - real provider parity
 - sandbox-complete command execution
@@ -190,6 +204,7 @@ Not yet implemented:
 - full resume reconstruction
 - interrupted turn reconciliation
 - transcript tail truncation recovery
+- automatic retry/re-execution orchestration for interrupted tool calls
 - richer fork-session behavior beyond current baseline
 
 ### resilience

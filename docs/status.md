@@ -105,6 +105,16 @@ Replay:
 - permission decision persistence
 - persistent permission rule store
 
+### Recovery classification (current slice)
+
+- `classify_tool_call_recovery(records, tool_call_id)` is implemented
+- recovery states are exactly: `completed`, `denied`, `interrupted`, `not_found`
+- `classify_tool_call_recovery_from_transcript(store, session_id, tool_call_id)` is implemented and only:
+  - loads persisted records with `store.load_records(session_id)`
+  - delegates to `classify_tool_call_recovery(...)`
+- `interrupted` is classification-only (started without finished), not resumable execution
+- pre-start partial records remain explicit errors (`ValueError`)
+
 ---
 
 ## What this means
@@ -125,6 +135,11 @@ This repository does **not** yet provide:
 
 - full security sandbox
 - full recovery/resume semantics
+- resumable interrupted tool execution
+- automatic retry/re-execution as part of recovery classification
+- full resume reconstruction
+- interrupted turn reconciliation
+- transcript tail truncation recovery
 - real provider integration
 - production deployment layer
 - multi-tenant runtime
